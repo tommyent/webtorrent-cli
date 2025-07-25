@@ -21,7 +21,60 @@ import { hideBin } from 'yargs/helpers'
 import open from 'open'
 
 import webTorrentCliVersion from '../version.cjs'
+import WebTorrentREPL from '../lib/repl.js'
 const webTorrentVersion = WebTorrent.VERSION
+
+async function showModeSelection() {
+  console.log(chalk.red(`
+  __        __   _   _____                         _   
+  \\ \\      / /__| |_|_   _|__  _ __ _ __ ___ _ __ | |_ 
+   \\ \\ /\\ / / _ \\ '_ \\| |/ _ \\| '__| '__/ _ \\ '_ \\| __|
+    \\ V  V /  __/ |_) | | (_) | |  | | |  __/ | | | |_ 
+     \\_/\\_/ \\___|_.__/|_|\\___/|_|  |_|  \\___|_| |_|\\__|
+  `))
+  
+  console.log(chalk.bold.blue('🌊 WebTorrent CLI'))
+  console.log(chalk.gray(`Version ${webTorrentCliVersion} (WebTorrent ${webTorrentVersion})\n`))
+  
+  const choices = await inquirer.prompt([{
+    type: 'list',
+    name: 'mode',
+    message: 'Choose your interface:',
+    choices: [
+      {
+        name: chalk.blue('🆕 Enhanced Interactive Mode') + chalk.gray(' - Claude Code-inspired REPL with natural language'),
+        value: 'repl',
+        short: 'Enhanced Interactive'
+      },
+      {
+        name: chalk.yellow('📜 Original CLI Mode') + chalk.gray(' - Traditional command-line interface'),
+        value: 'original',
+        short: 'Original CLI'
+      },
+      {
+        name: chalk.gray('❓ Show Help') + chalk.gray(' - View all available commands'),
+        value: 'help',
+        short: 'Help'
+      }
+    ],
+    default: 'repl'
+  }])
+
+  switch (choices.mode) {
+    case 'repl':
+      console.log(chalk.green('\\n🚀 Starting Enhanced Interactive Mode...\\n'))
+      const repl = new WebTorrentREPL()
+      repl.start()
+      break
+    case 'original':
+      console.log(chalk.green('\\n📜 Starting Original CLI Mode...\\n'))
+      yargs.showHelp('log')
+      break
+    case 'help':
+      yargs.showHelp('log')
+      break
+  }
+}
 
 const yargs = Yargs()
 
@@ -45,6 +98,12 @@ const options = {
     s: { alias: 'select', desc: 'Select specific file in torrent', defaultDescription: 'List files' },
     i: { alias: 'interactive-select', desc: 'Interactively select specific file in torrent', type: 'boolean' },
     t: { alias: 'subtitles', desc: 'Load subtitles file', type: 'string', requiresArg: true }
+  },
+  interactive: {
+    'interactive': { desc: 'Start enhanced interactive REPL mode', type: 'boolean' },
+    'repl': { desc: 'Alias for --interactive', type: 'boolean' },
+    'classic': { desc: 'Use original CLI mode', type: 'boolean' },
+    'mode-select': { desc: 'Show interface mode selection menu', type: 'boolean' }
   },
   advanced: {
     p: { alias: 'port', desc: 'Change the http server port', type: 'number', default: 8000, requiresArg: true },
@@ -151,6 +210,7 @@ yargs
   .command(commands)
   .options(options.streaming).group(Object.keys(options.streaming), 'Options (streaming): ')
   .options(options.simple).group(Object.keys(options.simple).concat(['help', 'version']), 'Options (simple): ')
+  .options(options.interactive).group(Object.keys(options.interactive), 'Options (interactive): ')
   .options(options.advanced).group(Object.keys(options.advanced), 'Options (advanced)')
 
 // Yargs callback order: middleware(callback) -> command(callback) -> yargs.parse(callback)
@@ -163,8 +223,31 @@ yargs
   .alias({ help: 'h', version: 'v' })
   .parse(hideBin(process.argv), { startTime: Date.now() })
 
-function init (_argv) {
+async function init (_argv) {
   argv = _argv
+  
+  // Check for explicit classic mode flag first
+  if (argv.classic) {
+    console.log(chalk.yellow('📜 Using original CLI mode'))
+    console.log(chalk.gray('Tip: Run without --classic for enhanced mode, or use --mode-select for mode selection\n'))
+    // Continue with original CLI behavior
+    if ((argv._.length === 0 && !argv.torrentIds) || argv._[0] === 'version') {
+      return
+    }
+  } 
+  // Check for explicit mode selection flag
+  else if (argv['mode-select']) {
+    await showModeSelection()
+    return
+  }
+  // Default to enhanced interactive mode when no arguments provided
+  else if (argv._.length === 0 && !argv.torrentIds && argv._[0] !== 'version') {
+    // Just start the REPL without extra messages - it will show its own welcome
+    const repl = new WebTorrentREPL()
+    repl.start()
+    return
+  }
+  
   if ((argv._.length === 0 && !argv.torrentIds) || argv._[0] === 'version') {
     return
   }
